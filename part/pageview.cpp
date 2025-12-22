@@ -2836,6 +2836,7 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
 
         // if we support text generation
         QString selectedText;
+        const PageViewItem *firstPageItem = nullptr; // Track first page item for AI context
         if (d->document->supportsSearching()) {
             // grab text in selection by extracting it from all intersected pages
             const Okular::Page *okularPage = nullptr;
@@ -2846,6 +2847,10 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
 
                 const QRect &itemRect = item->croppedGeometry();
                 if (selectionRect.intersects(itemRect)) {
+                    // Track first page item for AI context
+                    if (!firstPageItem) {
+                        firstPageItem = item;
+                    }
                     // request the textpage if there isn't one
                     okularPage = item->page();
                     qCDebug(OkularUiDebug) << "checking if page" << item->pageNumber() << "has text:" << okularPage->hasTextPage();
@@ -2893,6 +2898,22 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
             if (copyAllowed) {
                 addSearchWithinDocumentAction(&menu, selectedText);
                 addWebShortcutsMenu(&menu, selectedText);
+
+                // AI assistance action
+                if (firstPageItem) {
+                    menu.addSeparator();
+                    QAction *askAIAction = menu.addAction(QIcon::fromTheme(QStringLiteral("help-contextual")), i18n("Ask AI..."));
+                    askAIAction->setObjectName(QStringLiteral("AskAI"));
+                    connect(askAIAction, &QAction::triggered, this, [this, selectedText, firstPageItem, selectionRect]() {
+                        // Calculate normalized selection rectangle (0.0-1.0)
+                        const QRect itemGeom = firstPageItem->uncroppedGeometry();
+                        const QRectF normRect(static_cast<qreal>(selectionRect.x() - itemGeom.x()) / firstPageItem->uncroppedWidth(),
+                                              static_cast<qreal>(selectionRect.y() - itemGeom.y()) / firstPageItem->uncroppedHeight(),
+                                              static_cast<qreal>(selectionRect.width()) / firstPageItem->uncroppedWidth(),
+                                              static_cast<qreal>(selectionRect.height()) / firstPageItem->uncroppedHeight());
+                        Q_EMIT askAI(selectedText, firstPageItem->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+                    });
+                }
             }
         }
         menu.addAction(new OKMenuTitle(&menu, i18n("Image (%1 × %2 pixels)", selectionRect.width(), selectionRect.height())));
@@ -3098,6 +3119,27 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                     } else {
                         addSearchWithinDocumentAction(menu, d->selectedText());
                         addWebShortcutsMenu(menu, d->selectedText());
+
+                        // AI assistance action (TextSelect mode)
+                        menu->addSeparator();
+                        QAction *askAIAction = menu->addAction(QIcon::fromTheme(QStringLiteral("help-contextual")), i18n("Ask AI..."));
+                        askAIAction->setObjectName(QStringLiteral("AskAI"));
+                        connect(askAIAction, &QAction::triggered, this, [this, item]() {
+                            const Okular::RegularAreaRect *sel = item->page()->textSelection();
+                            QRectF normRect;
+                            if (sel && !sel->isEmpty()) {
+                                // Compute bounding rect from all normalized rects in selection
+                                double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
+                                for (const Okular::NormalizedRect &r : *sel) {
+                                    minX = qMin(minX, r.left);
+                                    minY = qMin(minY, r.top);
+                                    maxX = qMax(maxX, r.right);
+                                    maxY = qMax(maxY, r.bottom);
+                                }
+                                normRect = QRectF(minX, minY, maxX - minX, maxY - minY);
+                            }
+                            Q_EMIT askAI(d->selectedText(), item->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+                        });
                     }
 
                     // if the right-click was over a link add "Follow This link" instead of "Go to"
