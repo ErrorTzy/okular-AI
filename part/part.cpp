@@ -3936,6 +3936,24 @@ QAbstractItemModel *Part::annotationsModel() const
     return m_reviewsWidget ? m_reviewsWidget->annotationsModel() : nullptr;
 }
 
+void Part::handleAIResponse(const QString &requestId, const QString &response, bool success)
+{
+    Q_UNUSED(requestId);
+    // Response display handled by external AI service UI
+    // This method exists for future in-Okular response display
+    Q_UNUSED(response);
+    Q_UNUSED(success);
+}
+
+void Part::showAIStatus(const QString &requestId, const QString &status, double progress)
+{
+    Q_UNUSED(requestId);
+    // Status display handled by external AI service UI
+    // This method exists for future in-Okular status display
+    Q_UNUSED(status);
+    Q_UNUSED(progress);
+}
+
 } // namespace Okular
 
 #include "part.moc"

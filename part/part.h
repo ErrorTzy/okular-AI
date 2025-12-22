@@ -185,6 +185,24 @@ public Q_SLOTS: // dbus
     Q_SCRIPTABLE Q_NOREPLY void setEditorCmd(const QString &editorCmd);
     Q_SCRIPTABLE void slotOpenContainingFolder();
 
+    /**
+     * Called by external AI service to display a response
+     * @param requestId Unique ID matching the original request
+     * @param response The AI-generated response text
+     * @param success Whether the request was successful
+     * @since 25.04
+     */
+    Q_SCRIPTABLE void handleAIResponse(const QString &requestId, const QString &response, bool success);
+
+    /**
+     * Called by external AI service to show processing status
+     * @param requestId Unique ID matching the original request
+     * @param status Human-readable status message
+     * @param progress Progress value (0.0-1.0) or -1 for indeterminate
+     * @since 25.04
+     */
+    Q_SCRIPTABLE void showAIStatus(const QString &requestId, const QString &status, double progress);
+
 Q_SIGNALS:
     void enablePrintAction(bool enable);
     void openSourceReference(const QString &absFileName, int line, int column); /* cppcheck-suppress duplInheritedMember; see viewerinterface*/
