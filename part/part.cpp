@@ -29,6 +29,7 @@
 #include <QContextMenuEvent>
 #if HAVE_DBUS
 #include <QDBusConnection>
+#include <QDBusMessage>
 #endif // HAVE_DBUS
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -533,6 +534,15 @@ Part::Part(QObject *parent, const QVariantList &args)
     connect(m_pageView.data(), &PageView::requestOpenNewlySignedFile, this, &Part::requestOpenNewlySignedFile);
 #if HAVE_NEW_SIGNATURE_API
     connect(m_pageView.data(), &PageView::signingStarted, this, [this] { m_signatureInProgressMessage->setVisible(true); });
+#endif
+
+#if HAVE_DBUS
+    // Connect AI assistance signal to DBus emission
+    connect(m_pageView.data(), &PageView::askAI, this, [this](const QString &selectedText, int pageNumber, const QRectF &selectionRect, const QString &documentPath) {
+        QDBusMessage signal = QDBusMessage::createSignal(m_registerDbusName, QStringLiteral("org.kde.okular.AI"), QStringLiteral("AskAI"));
+        signal << selectedText << pageNumber << selectionRect.x() << selectionRect.y() << selectionRect.width() << selectionRect.height() << documentPath;
+        QDBusConnection::sessionBus().send(signal);
+    });
 #endif
 
     connect(m_reviewsWidget.data(), &Reviews::openAnnotationWindow, m_pageView.data(), &PageView::openAnnotationWindow);

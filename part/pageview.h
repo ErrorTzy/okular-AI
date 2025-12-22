@@ -174,6 +174,15 @@ Q_SIGNALS:
     void requestOpenNewlySignedFile(const QString &filePath, int pageNumber);
     void signingStarted();
     void signingFinished();
+    /**
+     * Emitted when user requests AI assistance on selected text
+     * @param selectedText The raw text selected by the user
+     * @param pageNumber Zero-indexed page number where selection occurred
+     * @param selectionRect Normalized selection rectangle (0.0-1.0 coordinates)
+     * @param documentPath Absolute path to the current document
+     * @since 25.04
+     */
+    void askAI(const QString &selectedText, int pageNumber, const QRectF &selectionRect, const QString &documentPath);
 
 protected:
     bool event(QEvent *event) override;
