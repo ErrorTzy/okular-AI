@@ -441,6 +441,75 @@ public:
 // KDE_DUMMY_QHASH_FUNCTION(NormalizedRect)
 
 /**
+ * @short Represents a layout block for text selection constraints.
+ *
+ * Layout blocks are regions of a page where text selection should be contained.
+ * They are typically detected by AI-based layout analysis (e.g., Surya) and
+ * embedded in PDF metadata. When present, text selection is constrained to
+ * stay within block boundaries, enabling proper selection in multi-column layouts.
+ *
+ * @since 24.12
+ */
+struct OKULARCORE_EXPORT LayoutBlock {
+    QString id;           ///< Unique identifier for this block
+    int page;             ///< Page number (0-indexed)
+    NormalizedRect bbox;  ///< Bounding box in normalized coordinates (0.0-1.0)
+    QString blockType;    ///< Block type: TEXT, FORMULA, TABLE, IMAGE, etc.
+    int readingOrder;     ///< Order for cross-block navigation
+    double confidence;    ///< Detection confidence (0.0-1.0)
+
+    /**
+     * Default constructor creating an empty layout block.
+     */
+    LayoutBlock()
+        : page(-1)
+        , readingOrder(-1)
+        , confidence(0.0)
+    {
+    }
+
+    /**
+     * Constructor with all fields.
+     *
+     * @param id Unique identifier for this block
+     * @param page Page number (0-indexed)
+     * @param bbox Bounding box in normalized coordinates
+     * @param blockType Block type identifier
+     * @param readingOrder Order for cross-block navigation
+     * @param confidence Detection confidence (0.0-1.0)
+     */
+    LayoutBlock(const QString &id, int page, const NormalizedRect &bbox, const QString &blockType, int readingOrder, double confidence)
+        : id(id)
+        , page(page)
+        , bbox(bbox)
+        , blockType(blockType)
+        , readingOrder(readingOrder)
+        , confidence(confidence)
+    {
+    }
+
+    /**
+     * Returns whether the block contains the given normalized point.
+     *
+     * @param p The point to check in normalized coordinates
+     * @return true if the point is within the block's bounding box
+     */
+    bool contains(const NormalizedPoint &p) const;
+
+    /**
+     * Returns whether the block contains the center of the given rectangle.
+     *
+     * This is useful for determining if a TextEntity belongs to this block.
+     * The center point is used rather than requiring full containment to
+     * handle text that slightly overlaps block boundaries.
+     *
+     * @param r The rectangle to check in normalized coordinates
+     * @return true if the center of the rectangle is within the block's bounding box
+     */
+    bool contains(const NormalizedRect &r) const;
+};
+
+/**
  * @short An area with normalized coordinates that contains a reference to an object.
  *
  * These areas ("rects") contain a pointer to a document object

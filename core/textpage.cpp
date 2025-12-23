@@ -167,6 +167,83 @@ TextPagePrivate::~TextPagePrivate()
     qDeleteAll(m_searchPoints);
 }
 
+const LayoutBlock *TextPagePrivate::findBlockContaining(const NormalizedPoint &p) const
+{
+    for (const auto &block : m_layoutBlocks) {
+        if (block.contains(p)) {
+            return &block;
+        }
+    }
+    return nullptr;
+}
+
+const LayoutBlock *TextPagePrivate::findBlockContaining(const NormalizedRect &r) const
+{
+    for (const auto &block : m_layoutBlocks) {
+        if (block.contains(r)) {
+            return &block;
+        }
+    }
+    return nullptr;
+}
+
+const LayoutBlock *TextPagePrivate::getNextBlock(const LayoutBlock *current) const
+{
+    if (!current) {
+        return nullptr;
+    }
+
+    for (const auto &block : m_layoutBlocks) {
+        if (block.readingOrder == current->readingOrder + 1) {
+            return &block;
+        }
+    }
+    return nullptr;
+}
+
+const LayoutBlock *TextPagePrivate::getPreviousBlock(const LayoutBlock *current) const
+{
+    if (!current) {
+        return nullptr;
+    }
+
+    for (const auto &block : m_layoutBlocks) {
+        if (block.readingOrder == current->readingOrder - 1) {
+            return &block;
+        }
+    }
+    return nullptr;
+}
+
+bool TextPagePrivate::isLastEntityInBlock(TextEntity::List::ConstIterator it, const LayoutBlock *block) const
+{
+    if (!block || it == m_words.constEnd()) {
+        return true;
+    }
+
+    auto next = it + 1;
+    if (next == m_words.constEnd()) {
+        return true;
+    }
+
+    return !block->contains(next->area());
+}
+
+bool TextPagePrivate::shouldIncludeEntity(const TextEntity &entity, const LayoutBlock *block) const
+{
+    if (!block) {
+        return true;
+    }
+
+    // Use center point of entity for inclusion decision
+    // This handles entities that span block boundaries more gracefully
+    NormalizedRect area = entity.area();
+    double cx = (area.left + area.right) / 2.0;
+    double cy = (area.top + area.bottom) / 2.0;
+
+    return block->bbox.contains(cx, cy);
+}
+
 TextPage::TextPage()
     : d(new TextPagePrivate())
 {

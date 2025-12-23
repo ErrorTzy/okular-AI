@@ -502,3 +502,18 @@ NonOwningObjectRect::~NonOwningObjectRect()
     // Set m_object so that ~ObjectRect() doesn't delete it
     m_object = nullptr;
 }
+
+/** class LayoutBlock **/
+
+bool LayoutBlock::contains(const NormalizedPoint &p) const
+{
+    return bbox.contains(p.x, p.y);
+}
+
+bool LayoutBlock::contains(const NormalizedRect &r) const
+{
+    // Check if center of r is within this block
+    const double cx = (r.left + r.right) / 2.0;
+    const double cy = (r.top + r.bottom) / 2.0;
+    return bbox.contains(cx, cy);
+}
