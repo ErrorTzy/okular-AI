@@ -362,7 +362,7 @@ private:
     QRect m_area;
 };
 
-std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel) const
+std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bool allowCrossBlock) const
 {
     if (d->m_words.isEmpty()) {
         return std::make_unique<RegularAreaRect>();
@@ -627,8 +627,60 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel) co
         end--;
     }
 
-    for (; start <= end; start++) {
-        ret->appendShape(start->transformedArea(matrix), side);
+    // Block-constrained selection
+    // Use original behavior if:
+    // 1. No layout blocks are defined, OR
+    // 2. allowCrossBlock is true (user is holding Shift to override block constraints)
+    if (d->m_layoutBlocks.isEmpty() || allowCrossBlock) {
+        // No blocks defined or cross-block selection allowed - use original behavior
+        for (; start <= end; start++) {
+            ret->appendShape(start->transformedArea(matrix), side);
+        }
+    } else {
+        // Find the block containing the start point
+        NormalizedPoint startPoint(startC.x, startC.y);
+        const LayoutBlock *activeBlock = d->findBlockContaining(startPoint);
+
+        // If start point not in any block, find the nearest block
+        // (the one whose top edge is nearest to or above the start point)
+        if (!activeBlock && !d->m_layoutBlocks.isEmpty()) {
+            activeBlock = &d->m_layoutBlocks.first();
+            for (const auto &block : d->m_layoutBlocks) {
+                if (block.bbox.top <= startPoint.y && (activeBlock->bbox.top > startPoint.y || block.bbox.top > activeBlock->bbox.top)) {
+                    activeBlock = &block;
+                }
+            }
+        }
+
+        for (; start <= end; start++) {
+            if (activeBlock) {
+                // Use shouldIncludeEntity for center-point based inclusion
+                // This handles entities spanning block boundaries more gracefully
+                if (!d->shouldIncludeEntity(*start, activeBlock)) {
+                    // Entity center is outside current block
+
+                    // Check if we've naturally reached the end of the block
+                    // (i.e., the previous entity was the last one in the block)
+                    auto prev = start;
+                    if (prev != d->m_words.constBegin()) {
+                        --prev;
+                        if (d->isLastEntityInBlock(prev, activeBlock)) {
+                            // Move to next block in reading order
+                            activeBlock = d->getNextBlock(activeBlock);
+
+                            // If entity center is in the new block, include it
+                            if (activeBlock && d->shouldIncludeEntity(*start, activeBlock)) {
+                                ret->appendShape(start->transformedArea(matrix), side);
+                            }
+                        }
+                    }
+                    // Skip entities whose center is outside current block
+                    continue;
+                }
+            }
+
+            ret->appendShape(start->transformedArea(matrix), side);
+        }
     }
 
     return ret;
