@@ -19,9 +19,11 @@
 #define POPPLER_VERSION_MACRO ((POPPLER_VERSION_MAJOR << 16) | (POPPLER_VERSION_MINOR << 8) | (POPPLER_VERSION_MICRO))
 
 #include <QBitArray>
+#include <QMap>
 #include <QPointer>
 
 #include <core/annotations.h>
+#include <core/area.h>
 #include <core/document.h>
 #include <core/generator.h>
 #include <core/printoptionswidget.h>
@@ -173,6 +175,24 @@ private:
     bool documentHasPassword = false;
     QHash<int, Okular::Action *> m_additionalDocumentActions;
     void setAdditionalDocumentAction(Okular::Document::DocumentAdditionalActionType type, Okular::Action *action);
+
+    // Layout blocks for block-aware text selection
+    /**
+     * Parse layout blocks from XMP metadata embedded in the PDF.
+     * Layout blocks define regions where text selection should be constrained,
+     * enabling proper selection in multi-column documents.
+     *
+     * @param xmp The XMP metadata string from the PDF
+     * @return List of layout blocks parsed from the okular namespace
+     */
+    QList<Okular::LayoutBlock> parseLayoutBlocksFromXMP(const QString &xmp);
+
+    /**
+     * Storage for layout blocks per page.
+     * Key: page number (0-indexed)
+     * Value: list of layout blocks for that page
+     */
+    QMap<int, QList<Okular::LayoutBlock>> m_pageLayoutBlocks;
 };
 
 #endif

@@ -780,13 +780,24 @@ Okular::Document::OpenResult PDFGenerator::init(QList<Okular::Page *> &pagesVect
     }
 
     hasVisibleOverprint = false;
-    QXmlStreamReader xml(pdfdoc->metadata());
+    const QString xmpMetadata = pdfdoc->metadata();
+    QXmlStreamReader xml(xmpMetadata);
     while (!xml.atEnd()) {
         xml.readNext();
         if (xml.isStartElement() && xml.name() == QStringLiteral("HasVisibleOverprint")) {
             xml.readNext();
             hasVisibleOverprint = xml.text().toString().toLower() == QStringLiteral("true");
         }
+    }
+
+    // Parse layout blocks from XMP metadata for block-aware text selection
+    m_pageLayoutBlocks.clear();
+    const QList<Okular::LayoutBlock> allBlocks = parseLayoutBlocksFromXMP(xmpMetadata);
+    for (const Okular::LayoutBlock &block : allBlocks) {
+        m_pageLayoutBlocks[block.page].append(block);
+    }
+    if (!allBlocks.isEmpty()) {
+        qCDebug(OkularPdfDebug) << "Parsed" << allBlocks.size() << "layout blocks from XMP metadata";
     }
 
     // build Pages (currentPage was set -1 by deletePages)
@@ -879,8 +890,105 @@ bool PDFGenerator::doCloseDocument()
     docEmbeddedFiles.clear();
     nextFontPage = 0;
     rectsGenerated.clear();
+    m_pageLayoutBlocks.clear();
 
     return true;
+}
+
+QList<Okular::LayoutBlock> PDFGenerator::parseLayoutBlocksFromXMP(const QString &xmp)
+{
+    QList<Okular::LayoutBlock> blocks;
+
+    if (xmp.isEmpty()) {
+        return blocks;
+    }
+
+    QXmlStreamReader reader(xmp);
+
+    // Track whether we're inside an okular:layoutBlocks element
+    bool inLayoutBlocks = false;
+    // Track whether we're inside an rdf:li element (a single block)
+    bool inBlockItem = false;
+    // Current block being parsed
+    Okular::LayoutBlock currentBlock;
+
+    while (!reader.atEnd()) {
+        reader.readNext();
+
+        if (reader.isStartElement()) {
+            const QStringView localName = reader.name();
+            const QStringView namespaceUri = reader.namespaceUri();
+
+            // Check for okular:layoutBlocks start
+            if (localName == QStringLiteral("layoutBlocks") && namespaceUri.contains(QStringLiteral("okular"))) {
+                inLayoutBlocks = true;
+                continue;
+            }
+
+            // Inside layoutBlocks, look for rdf:li elements (block items)
+            if (inLayoutBlocks && localName == QStringLiteral("li")) {
+                inBlockItem = true;
+                // Reset current block for new item
+                currentBlock = Okular::LayoutBlock();
+                continue;
+            }
+
+            // Parse block properties when inside a block item
+            if (inBlockItem) {
+                const QString elementName = localName.toString();
+                const QString value = reader.readElementText();
+
+                if (elementName == QStringLiteral("id")) {
+                    currentBlock.id = value;
+                } else if (elementName == QStringLiteral("page")) {
+                    currentBlock.page = value.toInt();
+                } else if (elementName == QStringLiteral("type")) {
+                    currentBlock.blockType = value;
+                } else if (elementName == QStringLiteral("readingOrder")) {
+                    currentBlock.readingOrder = value.toInt();
+                } else if (elementName == QStringLiteral("confidence")) {
+                    currentBlock.confidence = value.toDouble();
+                } else if (elementName == QStringLiteral("bbox")) {
+                    // Parse bbox in format "left,top,right,bottom"
+                    const QStringList coords = value.split(QLatin1Char(','));
+                    if (coords.size() == 4) {
+                        bool ok1, ok2, ok3, ok4;
+                        const double left = coords[0].toDouble(&ok1);
+                        const double top = coords[1].toDouble(&ok2);
+                        const double right = coords[2].toDouble(&ok3);
+                        const double bottom = coords[3].toDouble(&ok4);
+
+                        if (ok1 && ok2 && ok3 && ok4) {
+                            currentBlock.bbox = Okular::NormalizedRect(left, top, right, bottom);
+                        }
+                    }
+                }
+            }
+        } else if (reader.isEndElement()) {
+            const QStringView localName = reader.name();
+            const QStringView namespaceUri = reader.namespaceUri();
+
+            // End of a block item - save the block
+            if (inBlockItem && localName == QStringLiteral("li")) {
+                // Only add block if it has valid data (at least an id and valid bbox)
+                if (!currentBlock.id.isEmpty() && !currentBlock.bbox.isNull()) {
+                    blocks.append(currentBlock);
+                }
+                inBlockItem = false;
+            }
+
+            // End of layoutBlocks section
+            if (inLayoutBlocks && localName == QStringLiteral("layoutBlocks") && namespaceUri.contains(QStringLiteral("okular"))) {
+                inLayoutBlocks = false;
+            }
+        }
+    }
+
+    if (reader.hasError()) {
+        qCDebug(OkularPdfDebug) << "XMP parsing error:" << reader.errorString();
+    }
+
+    return blocks;
 }
 
 void PDFGenerator::loadPages(QList<Okular::Page *> &pagesVector, int rotation, bool clear)
