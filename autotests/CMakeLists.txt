@@ -74,6 +74,11 @@ ecm_add_test(searchtest.cpp
     LINK_LIBRARIES Qt6::Widgets Qt6::Test Qt6::Xml okularcore
 )
 
+ecm_add_test(textpageblocktest.cpp
+    TEST_NAME "textpageblocktest"
+    LINK_LIBRARIES Qt6::Widgets Qt6::Test okularcore
+)
+
 ecm_add_test(annotationstest.cpp
     TEST_NAME "annotationstest"
     LINK_LIBRARIES Qt6::Widgets Qt6::Test Qt6::Xml okularcore
