@@ -3478,7 +3478,7 @@ void PageView::scrollContentsBy(int dx, int dy)
 }
 // END widget events
 
-std::vector<std::unique_ptr<Okular::RegularAreaRect>> PageView::textSelections(const QPoint start, const QPoint end, int &firstpage)
+std::vector<std::unique_ptr<Okular::RegularAreaRect>> PageView::textSelections(const QPoint start, const QPoint end, int &firstpage, bool allowCrossBlock)
 {
     firstpage = -1;
     std::vector<std::unique_ptr<Okular::RegularAreaRect>> ret;
@@ -3525,23 +3525,23 @@ std::vector<std::unique_ptr<Okular::RegularAreaRect>> PageView::textSelections(c
         if (affectedItemsIds.count() == 1) {
             const PageViewItem *item = d->items[affectedItemsIds.first()];
             selectionRect.translate(-item->uncroppedGeometry().topLeft());
-            ret.push_back(textSelectionForItem(item, direction_ne_sw ? selectionRect.topRight() : selectionRect.topLeft(), direction_ne_sw ? selectionRect.bottomLeft() : selectionRect.bottomRight()));
+            ret.push_back(textSelectionForItem(item, direction_ne_sw ? selectionRect.topRight() : selectionRect.topLeft(), direction_ne_sw ? selectionRect.bottomLeft() : selectionRect.bottomRight(), allowCrossBlock));
         } else if (affectedItemsIds.count() > 1) {
             // first item
             const PageViewItem *first = d->items[affectedItemsIds.first()];
             QRect geom = first->croppedGeometry().intersected(selectionRect).translated(-first->uncroppedGeometry().topLeft());
-            ret.push_back(textSelectionForItem(first, selectionRect.bottom() > geom.height() ? (direction_ne_sw ? geom.topRight() : geom.topLeft()) : (direction_ne_sw ? geom.bottomRight() : geom.bottomLeft()), QPoint()));
+            ret.push_back(textSelectionForItem(first, selectionRect.bottom() > geom.height() ? (direction_ne_sw ? geom.topRight() : geom.topLeft()) : (direction_ne_sw ? geom.bottomRight() : geom.bottomLeft()), QPoint(), allowCrossBlock));
             // last item
             const PageViewItem *last = d->items[affectedItemsIds.last()];
             geom = last->croppedGeometry().intersected(selectionRect).translated(-last->uncroppedGeometry().topLeft());
             // the last item needs to appended at last...
             std::unique_ptr<Okular::RegularAreaRect> lastArea =
-                textSelectionForItem(last, QPoint(), selectionRect.bottom() > geom.height() ? (direction_ne_sw ? geom.bottomLeft() : geom.bottomRight()) : (direction_ne_sw ? geom.topLeft() : geom.topRight()));
+                textSelectionForItem(last, QPoint(), selectionRect.bottom() > geom.height() ? (direction_ne_sw ? geom.bottomLeft() : geom.bottomRight()) : (direction_ne_sw ? geom.topLeft() : geom.topRight()), allowCrossBlock);
             affectedItemsIds.removeFirst();
             affectedItemsIds.removeLast();
             // item between the two above
             for (const int page : std::as_const(affectedItemsIds)) {
-                ret.push_back(textSelectionForItem(d->items[page]));
+                ret.push_back(textSelectionForItem(d->items[page], QPoint(), QPoint(), allowCrossBlock));
             }
             ret.push_back(std::move(lastArea));
         }
@@ -3879,7 +3879,9 @@ void PageView::updateSelection(const QPoint pos)
     } else if (d->mouseTextSelecting) {
         scrollPosIntoView(pos);
         int first = -1;
-        std::vector<std::unique_ptr<Okular::RegularAreaRect>> selections = textSelections(pos, d->mouseSelectPos.toPoint(), first);
+        // Check if Shift is held to allow selection across layout blocks
+        const bool allowCrossBlock = QApplication::keyboardModifiers() & Qt::ShiftModifier;
+        std::vector<std::unique_ptr<Okular::RegularAreaRect>> selections = textSelections(pos, d->mouseSelectPos.toPoint(), first, allowCrossBlock);
         QSet<int> pagesWithSelectionSet;
         for (size_t i = 0; i < selections.size(); ++i) {
             pagesWithSelectionSet.insert(i + first);
@@ -3920,7 +3922,7 @@ static Okular::NormalizedPoint rotateInNormRect(const QPoint rotated, const QRec
     return ret;
 }
 
-std::unique_ptr<Okular::RegularAreaRect> PageView::textSelectionForItem(const PageViewItem *item, const QPoint startPoint, const QPoint endPoint)
+std::unique_ptr<Okular::RegularAreaRect> PageView::textSelectionForItem(const PageViewItem *item, const QPoint startPoint, const QPoint endPoint, bool allowCrossBlock)
 {
     const QRect &geometry = item->uncroppedGeometry();
     Okular::NormalizedPoint startCursor(0.0, 0.0);
@@ -3939,7 +3941,7 @@ std::unique_ptr<Okular::RegularAreaRect> PageView::textSelectionForItem(const Pa
         d->document->requestTextPage(okularPage->number());
     }
 
-    std::unique_ptr<Okular::RegularAreaRect> selectionArea = okularPage->textArea(mouseTextSelectionInfo);
+    std::unique_ptr<Okular::RegularAreaRect> selectionArea = okularPage->textArea(mouseTextSelectionInfo, allowCrossBlock);
 #ifdef PAGEVIEW_DEBUG
     qCDebug(OkularUiDebug).nospace() << "text areas (" << okularPage->number() << "): " << (selectionArea ? QString::number(selectionArea->count()) : QStringLiteral("(none)"));
 #endif

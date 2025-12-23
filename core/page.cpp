@@ -268,10 +268,10 @@ std::unique_ptr<RegularAreaRect> Page::wordAt(const NormalizedPoint &p) const
     return nullptr;
 }
 
-std::unique_ptr<RegularAreaRect> Page::textArea(const TextSelection &selection) const
+std::unique_ptr<RegularAreaRect> Page::textArea(const TextSelection &selection, bool allowCrossBlock) const
 {
     if (d->m_text) {
-        return d->m_text->textArea(selection);
+        return d->m_text->textArea(selection, allowCrossBlock);
     }
 
     return nullptr;

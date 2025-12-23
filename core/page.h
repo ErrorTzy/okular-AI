@@ -219,8 +219,14 @@ public:
 
     /**
      * Returns the rectangular area of the given @p selection.
+     *
+     * @param selection The text selection defining start and end points.
+     * @param allowCrossBlock If true, selection can span multiple layout blocks.
+     *        If false and layout blocks are defined, selection is constrained
+     *        to stay within block boundaries. Defaults to false.
+     * @since 24.12 allowCrossBlock parameter added
      */
-    std::unique_ptr<RegularAreaRect> textArea(const TextSelection &selection) const;
+    std::unique_ptr<RegularAreaRect> textArea(const TextSelection &selection, bool allowCrossBlock = false) const;
 
     /**
      * Returns the object rect of the given @p type which is at point (@p x, @p y) at scale (@p xScale, @p yScale).

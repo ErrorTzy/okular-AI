@@ -111,8 +111,8 @@ public:
     QVariant capability(ViewCapability capability) const override;
     void setCapability(ViewCapability capability, const QVariant &option) override;
 
-    std::vector<std::unique_ptr<Okular::RegularAreaRect>> textSelections(const QPoint start, const QPoint end, int &firstpage);
-    std::unique_ptr<Okular::RegularAreaRect> textSelectionForItem(const PageViewItem *item, const QPoint startPoint = QPoint(), const QPoint endPoint = QPoint());
+    std::vector<std::unique_ptr<Okular::RegularAreaRect>> textSelections(const QPoint start, const QPoint end, int &firstpage, bool allowCrossBlock = false);
+    std::unique_ptr<Okular::RegularAreaRect> textSelectionForItem(const PageViewItem *item, const QPoint startPoint = QPoint(), const QPoint endPoint = QPoint(), bool allowCrossBlock = false);
 
     void reparseConfig();
 
@@ -177,12 +177,15 @@ Q_SIGNALS:
     /**
      * Emitted when user requests AI assistance on selected text
      * @param selectedText The raw text selected by the user
+     * @param beforeText Up to 256 characters of text before the selection (for disambiguation)
+     * @param afterText Up to 256 characters of text after the selection (for disambiguation)
      * @param pageNumber Zero-indexed page number where selection occurred
      * @param selectionRect Normalized selection rectangle (0.0-1.0 coordinates)
      * @param documentPath Absolute path to the current document
      * @since 25.04
      */
-    void askAI(const QString &selectedText, int pageNumber, const QRectF &selectionRect, const QString &documentPath);
+    void askAI(const QString &selectedText, const QString &beforeText, const QString &afterText,
+               int pageNumber, const QRectF &selectionRect, const QString &documentPath);
 
 protected:
     bool event(QEvent *event) override;
