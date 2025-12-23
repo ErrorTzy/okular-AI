@@ -190,8 +190,34 @@ public:
 
     /**
      * Returns the rectangular area of the given @p selection.
+     *
+     * @param selection The text selection defining start and end points.
+     * @param allowCrossBlock If true, selection can span multiple layout blocks.
+     *        If false and layout blocks are defined, selection is constrained
+     *        to stay within block boundaries. Defaults to false.
+     * @since 24.12 allowCrossBlock parameter added
      */
-    std::unique_ptr<RegularAreaRect> textArea(const TextSelection &selection) const;
+    std::unique_ptr<RegularAreaRect> textArea(const TextSelection &selection, bool allowCrossBlock = false) const;
+
+    /**
+     * Set layout blocks for selection constraints.
+     *
+     * Layout blocks define regions where text selection should be constrained,
+     * enabling proper selection in multi-column documents. When blocks are set,
+     * text selection will be limited to stay within block boundaries.
+     *
+     * @param blocks List of layout blocks for this page
+     * @since 24.12
+     */
+    void setLayoutBlocks(const QList<LayoutBlock> &blocks);
+
+    /**
+     * Check if this page has layout block constraints.
+     *
+     * @return true if layout blocks have been set for this page
+     * @since 24.12
+     */
+    bool hasLayoutBlocks() const;
 
 private:
     TextPagePrivate *const d;

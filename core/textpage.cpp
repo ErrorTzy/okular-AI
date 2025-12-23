@@ -260,6 +260,16 @@ TextPage::~TextPage()
     delete d;
 }
 
+void TextPage::setLayoutBlocks(const QList<LayoutBlock> &blocks)
+{
+    d->m_layoutBlocks = blocks;
+}
+
+bool TextPage::hasLayoutBlocks() const
+{
+    return !d->m_layoutBlocks.isEmpty();
+}
+
 void TextPage::append(const QString &text, const NormalizedRect &area)
 {
     if (!text.isEmpty()) {

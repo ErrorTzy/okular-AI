@@ -1590,6 +1590,12 @@ Okular::TextPage *PDFGenerator::textPage(Okular::TextRequest *request)
     }
 
     Okular::TextPage *tp = abstractTextPage(textList, pageHeight, pageWidth, (Poppler::Page::Rotation)page->orientation());
+
+    // Set layout blocks for block-aware text selection if available
+    if (m_pageLayoutBlocks.contains(page->number())) {
+        tp->setLayoutBlocks(m_pageLayoutBlocks.value(page->number()));
+    }
+
     return tp;
 }
 
