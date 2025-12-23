@@ -2911,7 +2911,52 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                                               static_cast<qreal>(selectionRect.y() - itemGeom.y()) / firstPageItem->uncroppedHeight(),
                                               static_cast<qreal>(selectionRect.width()) / firstPageItem->uncroppedWidth(),
                                               static_cast<qreal>(selectionRect.height()) / firstPageItem->uncroppedHeight());
-                        Q_EMIT askAI(selectedText, firstPageItem->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+
+                        // Extract surrounding context (256 chars before and after)
+                        QString beforeText;
+                        QString afterText;
+                        const Okular::Page *page = firstPageItem->page();
+                        if (page) {
+                            const QString fullPageText = page->text();
+                            if (!fullPageText.isEmpty() && !selectedText.isEmpty()) {
+                                // Find selection position - handle multiple occurrences using spatial hint
+                                QList<int> positions;
+                                int pos = 0;
+                                while ((pos = fullPageText.indexOf(selectedText, pos)) != -1) {
+                                    positions.append(pos);
+                                    pos += 1;
+                                }
+
+                                int selPos = -1;
+                                if (positions.size() == 1) {
+                                    selPos = positions[0];
+                                } else if (positions.size() > 1) {
+                                    // Use normalized Y to estimate which occurrence
+                                    // Text position roughly correlates with vertical position
+                                    double targetRatio = normRect.y();
+                                    int targetPos = static_cast<int>(targetRatio * fullPageText.length());
+
+                                    // Find closest occurrence to target position
+                                    selPos = positions[0];
+                                    int minDist = qAbs(positions[0] - targetPos);
+                                    for (int p : positions) {
+                                        int dist = qAbs(p - targetPos);
+                                        if (dist < minDist) {
+                                            minDist = dist;
+                                            selPos = p;
+                                        }
+                                    }
+                                }
+
+                                if (selPos >= 0) {
+                                    int beforeStart = qMax(0, selPos - 256);
+                                    beforeText = fullPageText.mid(beforeStart, selPos - beforeStart);
+                                    afterText = fullPageText.mid(selPos + selectedText.length(), 256);
+                                }
+                            }
+                        }
+
+                        Q_EMIT askAI(selectedText, beforeText, afterText, firstPageItem->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
                     });
                 }
             }
@@ -3138,7 +3183,53 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                                 }
                                 normRect = QRectF(minX, minY, maxX - minX, maxY - minY);
                             }
-                            Q_EMIT askAI(d->selectedText(), item->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+
+                            // Extract surrounding context (256 chars before and after)
+                            QString beforeText;
+                            QString afterText;
+                            const QString selectedText = d->selectedText();
+                            const Okular::Page *page = item->page();
+                            if (page) {
+                                const QString fullPageText = page->text();
+                                if (!fullPageText.isEmpty() && !selectedText.isEmpty()) {
+                                    // Find selection position - handle multiple occurrences using spatial hint
+                                    QList<int> positions;
+                                    int pos = 0;
+                                    while ((pos = fullPageText.indexOf(selectedText, pos)) != -1) {
+                                        positions.append(pos);
+                                        pos += 1;
+                                    }
+
+                                    int selPos = -1;
+                                    if (positions.size() == 1) {
+                                        selPos = positions[0];
+                                    } else if (positions.size() > 1) {
+                                        // Use normalized Y to estimate which occurrence
+                                        // Text position roughly correlates with vertical position
+                                        double targetRatio = normRect.y();
+                                        int targetPos = static_cast<int>(targetRatio * fullPageText.length());
+
+                                        // Find closest occurrence to target position
+                                        selPos = positions[0];
+                                        int minDist = qAbs(positions[0] - targetPos);
+                                        for (int p : positions) {
+                                            int dist = qAbs(p - targetPos);
+                                            if (dist < minDist) {
+                                                minDist = dist;
+                                                selPos = p;
+                                            }
+                                        }
+                                    }
+
+                                    if (selPos >= 0) {
+                                        int beforeStart = qMax(0, selPos - 256);
+                                        beforeText = fullPageText.mid(beforeStart, selPos - beforeStart);
+                                        afterText = fullPageText.mid(selPos + selectedText.length(), 256);
+                                    }
+                                }
+                            }
+
+                            Q_EMIT askAI(selectedText, beforeText, afterText, item->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
                         });
                     }
 
