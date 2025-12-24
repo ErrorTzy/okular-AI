@@ -652,33 +652,14 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
             }
         }
 
+        // Simple block-constrained selection: only include entities whose center is in the active block
+        // We DON'T advance blocks based on reading order - the user selected in this block,
+        // so we stay in this block. This handles interleaved column layouts correctly.
         for (; start <= end; start++) {
-            if (activeBlock) {
-                // Use shouldIncludeEntity for center-point based inclusion
-                // This handles entities spanning block boundaries more gracefully
-                if (!d->shouldIncludeEntity(*start, activeBlock)) {
-                    // Entity center is outside current block
-
-                    // Check if we've naturally reached the end of the block
-                    // (i.e., the previous entity was the last one in the block)
-                    auto prev = start;
-                    if (prev != d->m_words.constBegin()) {
-                        --prev;
-                        if (d->isLastEntityInBlock(prev, activeBlock)) {
-                            // Move to next block in reading order
-                            activeBlock = d->getNextBlock(activeBlock);
-
-                            // If entity center is in the new block, include it
-                            if (activeBlock && d->shouldIncludeEntity(*start, activeBlock)) {
-                                ret->appendShape(start->transformedArea(matrix), side);
-                            }
-                        }
-                    }
-                    // Skip entities whose center is outside current block
-                    continue;
-                }
+            if (activeBlock && !d->shouldIncludeEntity(*start, activeBlock)) {
+                // Entity center is outside the active block - skip it
+                continue;
             }
-
             ret->appendShape(start->transformedArea(matrix), side);
         }
     }
