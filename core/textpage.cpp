@@ -10,6 +10,7 @@
 #include <QDebug>
 
 #include "area.h"
+#include "blockselection.h"
 #include "debug_p.h"
 #include "misc.h"
 #include "page.h"
@@ -263,11 +264,19 @@ TextPage::~TextPage()
 void TextPage::setLayoutBlocks(const QList<LayoutBlock> &blocks)
 {
     d->m_layoutBlocks = blocks;
+    // Reading order is now computed by the AI service and embedded in XMP data.
+    // No need to recompute here - trust the XMP reading order.
+    // d->computeReadingOrder();
 }
 
 bool TextPage::hasLayoutBlocks() const
 {
     return !d->m_layoutBlocks.isEmpty();
+}
+
+QList<LayoutBlock> TextPage::layoutBlocks() const
+{
+    return d->m_layoutBlocks;
 }
 
 void TextPage::append(const QString &text, const NormalizedRect &area)
@@ -637,30 +646,112 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
             ret->appendShape(start->transformedArea(matrix), side);
         }
     } else {
-        // Find the block containing the start point
+        // Block-aware selection with reading order support
+        // Find the blocks containing start and end cursors
         NormalizedPoint startPoint(startC.x, startC.y);
-        const LayoutBlock *activeBlock = d->findBlockContaining(startPoint);
+        NormalizedPoint endPoint(endC.x, endC.y);
 
-        // If start point not in any block, find the nearest block
-        // (the one whose top edge is nearest to or above the start point)
-        if (!activeBlock && !d->m_layoutBlocks.isEmpty()) {
-            activeBlock = &d->m_layoutBlocks.first();
-            for (const auto &block : d->m_layoutBlocks) {
-                if (block.bbox.top <= startPoint.y && (activeBlock->bbox.top > startPoint.y || block.bbox.top > activeBlock->bbox.top)) {
-                    activeBlock = &block;
-                }
-            }
+        // Find block containing start cursor
+        const LayoutBlock *startBlock = BlockSelectionHelper::findBlockContaining(d->m_layoutBlocks, startPoint);
+        // Find block containing end cursor
+        const LayoutBlock *endBlock = BlockSelectionHelper::findBlockContaining(d->m_layoutBlocks, endPoint);
+
+        // If cursor is not in any block, find the nearest appropriate block
+        if (!startBlock) {
+            startBlock = BlockSelectionHelper::findBlockForCursor(d->m_layoutBlocks, startPoint);
+        }
+        if (!endBlock) {
+            endBlock = BlockSelectionHelper::findBlockForCursor(d->m_layoutBlocks, endPoint);
         }
 
-        // Simple block-constrained selection: only include entities whose center is in the active block
-        // We DON'T advance blocks based on reading order - the user selected in this block,
-        // so we stay in this block. This handles interleaved column layouts correctly.
-        for (; start <= end; start++) {
-            if (activeBlock && !d->shouldIncludeEntity(*start, activeBlock)) {
-                // Entity center is outside the active block - skip it
-                continue;
+        // Determine the reading order range
+        int minOrder, maxOrder;
+        if (startBlock && endBlock) {
+            minOrder = qMin(startBlock->readingOrder, endBlock->readingOrder);
+            maxOrder = qMax(startBlock->readingOrder, endBlock->readingOrder);
+        } else if (startBlock) {
+            minOrder = maxOrder = startBlock->readingOrder;
+        } else if (endBlock) {
+            minOrder = maxOrder = endBlock->readingOrder;
+        } else {
+            // No blocks found - fall back to original behavior
+            for (; start <= end; start++) {
+                ret->appendShape(start->transformedArea(matrix), side);
             }
-            ret->appendShape(start->transformedArea(matrix), side);
+            return ret;
+        }
+
+        // Collect all blocks in the reading order range
+        QList<const LayoutBlock *> activeBlocks = BlockSelectionHelper::getBlocksInReadingOrderRange(d->m_layoutBlocks, minOrder, maxOrder);
+
+        if (minOrder == maxOrder) {
+            // Single block selection: respect geometric boundaries
+            // Only include entities between start and end that are in the block
+            for (; start <= end; start++) {
+                if (BlockSelectionHelper::isEntityInAnyBlock(start->area(), activeBlocks)) {
+                    ret->appendShape(start->transformedArea(matrix), side);
+                }
+            }
+        } else {
+            // Cross-block selection with proper start/end handling:
+            // - Start block (where user started selecting): partial selection from cursor
+            // - Intermediate blocks: all entities
+            // - End block (where user ended selecting): partial selection to cursor
+            //
+            // Use geometric position checking instead of iterator comparison
+
+            for (auto it = d->m_words.constBegin(); it != d->m_words.constEnd(); ++it) {
+                // Find which block this entity belongs to
+                const LayoutBlock *entityBlock = nullptr;
+                for (const LayoutBlock *block : activeBlocks) {
+                    if (block->contains(it->area())) {
+                        entityBlock = block;
+                        break;
+                    }
+                }
+
+                if (!entityBlock) {
+                    continue;  // Entity not in any active block
+                }
+
+                // Check if entity is in the start or end block (by cursor position, not reading order)
+                bool inStartBlock = (entityBlock == startBlock);
+                bool inEndBlock = (entityBlock == endBlock);
+
+                // Get entity's geometric position for comparison
+                NormalizedRect entityArea = it->area();
+                double entityCenterY = (entityArea.top + entityArea.bottom) / 2.0;
+                double entityLeft = entityArea.left;
+
+                if (inStartBlock && inEndBlock) {
+                    // Start and end are in the same block - shouldn't happen in cross-block
+                    // but handle it anyway using geometric range
+                    if (it >= start && it <= end) {
+                        ret->appendShape(it->transformedArea(matrix), side);
+                    }
+                } else if (inStartBlock) {
+                    // Entity is in the block where selection started
+                    // Include if entity is at or after the start cursor position
+                    // (below the start line, or on the same line but to the right)
+                    bool afterStart = (entityCenterY > startC.y) ||
+                                      (qAbs(entityCenterY - startC.y) < 0.02 && entityLeft >= startC.x);
+                    if (afterStart) {
+                        ret->appendShape(it->transformedArea(matrix), side);
+                    }
+                } else if (inEndBlock) {
+                    // Entity is in the block where selection ended
+                    // Include if entity is at or before the end cursor position
+                    // (above the end line, or on the same line but to the left)
+                    bool beforeEnd = (entityCenterY < endC.y) ||
+                                     (qAbs(entityCenterY - endC.y) < 0.02 && entityLeft <= endC.x);
+                    if (beforeEnd) {
+                        ret->appendShape(it->transformedArea(matrix), side);
+                    }
+                } else {
+                    // Intermediate block: include all entities
+                    ret->appendShape(it->transformedArea(matrix), side);
+                }
+            }
         }
     }
 
@@ -1002,7 +1093,13 @@ QString TextPage::text(const RegularAreaRect *area, TextAreaInclusionBehaviour b
 
     TextEntity::List::ConstIterator it = d->m_words.constBegin(), itEnd = d->m_words.constEnd();
     QString ret;
-    if (area) {
+
+    // If we have layout blocks, extract text respecting reading order
+    if (!d->m_layoutBlocks.isEmpty() && area) {
+        bool useIntersects = (b == AnyPixelTextAreaInclusionBehaviour);
+        return BlockSelectionHelper::extractTextInReadingOrder(d->m_words, d->m_layoutBlocks, area, useIntersects);
+    } else if (area) {
+        // No layout blocks - use original behavior
         for (; it != itEnd; ++it) {
             if (b == AnyPixelTextAreaInclusionBehaviour) {
                 if (area->intersects(it->area())) {

@@ -152,6 +152,14 @@ public:
     bool hasTextPage() const;
 
     /**
+     * Returns the text page if available.
+     *
+     * @return Pointer to the TextPage, or nullptr if not available
+     * @since 24.12
+     */
+    TextPage *textPage() const;
+
+    /**
      * Returns whether the page has an object rect which includes the point (@p x, @p y)
      * at scale (@p xScale, @p yScale).
      */

@@ -219,6 +219,14 @@ public:
      */
     bool hasLayoutBlocks() const;
 
+    /**
+     * Get the layout blocks for this page.
+     *
+     * @return List of layout blocks (may be empty)
+     * @since 24.12
+     */
+    QList<LayoutBlock> layoutBlocks() const;
+
 private:
     TextPagePrivate *const d;
 

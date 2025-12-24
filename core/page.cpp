@@ -259,6 +259,11 @@ bool Page::hasTextPage() const
     return d->m_text != nullptr;
 }
 
+TextPage *Page::textPage() const
+{
+    return d->m_text;
+}
+
 std::unique_ptr<RegularAreaRect> Page::wordAt(const NormalizedPoint &p) const
 {
     if (d->m_text) {

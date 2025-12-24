@@ -26,6 +26,7 @@
 #include "core/observer.h"
 #include "core/page.h"
 #include "core/page_p.h"
+#include "core/textpage.h"
 #include "core/tile.h"
 #include "core/utils.h"
 #include "debug_ui.h"
@@ -639,6 +640,63 @@ void PagePainter::paintCroppedPageOnPainter(QPainter *destPainter,
         }
         mixedPainter->restore();
     }
+
+// Uncomment to enable visual debugging of layout blocks
+// #define DEBUG_LAYOUT_BLOCKS
+#ifdef DEBUG_LAYOUT_BLOCKS
+    /** 6B -- DEBUG: Draw LAYOUT BLOCKS on ACTIVE PAINTER **/
+    // Draw layout block boundaries for debugging block-aware selection
+    if (const Okular::TextPage *textPage = page->textPage()) {
+        if (textPage->hasLayoutBlocks()) {
+            mixedPainter->save();
+
+            // Color palette for different blocks
+            const QColor colors[] = {
+                QColor(255, 0, 0, 100),     // Red
+                QColor(0, 255, 0, 100),     // Green
+                QColor(0, 0, 255, 100),     // Blue
+                QColor(255, 255, 0, 100),   // Yellow
+                QColor(255, 0, 255, 100),   // Magenta
+                QColor(0, 255, 255, 100),   // Cyan
+                QColor(255, 128, 0, 100),   // Orange
+                QColor(128, 0, 255, 100),   // Purple
+            };
+            const int numColors = sizeof(colors) / sizeof(colors[0]);
+
+            const QList<Okular::LayoutBlock> blocks = textPage->layoutBlocks();
+            int blockIndex = 0;
+            for (const Okular::LayoutBlock &block : blocks) {
+                // Convert normalized coordinates to screen coordinates
+                const QRect blockRect = block.bbox.geometry(scaledWidth, scaledHeight).translated(-scaledCrop.topLeft());
+
+                // Choose color based on block index (order in XMP file)
+                const QColor &fillColor = colors[blockIndex % numColors];
+                blockIndex++;
+                QColor borderColor = fillColor;
+                borderColor.setAlpha(200);
+
+                // Draw filled rectangle
+                mixedPainter->fillRect(blockRect, fillColor);
+
+                // Draw border
+                mixedPainter->setPen(QPen(borderColor, 2));
+                mixedPainter->drawRect(blockRect);
+
+                // Draw reading order from XMP (now correctly computed by AI service)
+                mixedPainter->setPen(Qt::black);
+                QFont font = mixedPainter->font();
+                font.setPointSize(14);
+                font.setBold(true);
+                mixedPainter->setFont(font);
+                // Show reading order number for debugging
+                mixedPainter->drawText(blockRect.adjusted(5, 5, 0, 0), Qt::AlignLeft | Qt::AlignTop,
+                                       QString::number(block.readingOrder));
+            }
+
+            mixedPainter->restore();
+        }
+    }
+#endif
 
     /** 7 -- BUFFERED FLOW. Copy BACKPIXMAP on DESTINATION PAINTER **/
     if (useBackBuffer) {
