@@ -186,3 +186,55 @@ QString BlockSelectionHelper::extractTextInReadingOrder(const TextEntity::List &
 
     return result;
 }
+
+QStringList BlockSelectionHelper::getBlockIdsForSelection(const QList<LayoutBlock> &blocks, const NormalizedPoint &selectionStart, const NormalizedPoint &selectionEnd)
+{
+    QStringList result;
+
+    if (blocks.isEmpty()) {
+        return result;
+    }
+
+    // This algorithm matches TextPage::textArea() which uses reading order range
+    // between start and end blocks to determine which blocks are selected.
+
+    // Step 1: Find the block containing the start cursor
+    const LayoutBlock *startBlock = findBlockContaining(blocks, selectionStart);
+    if (!startBlock) {
+        startBlock = findBlockForCursor(blocks, selectionStart);
+    }
+
+    // Step 2: Find the block containing the end cursor
+    const LayoutBlock *endBlock = findBlockContaining(blocks, selectionEnd);
+    if (!endBlock) {
+        endBlock = findBlockForCursor(blocks, selectionEnd);
+    }
+
+    // Step 3: Determine reading order range
+    int minOrder, maxOrder;
+    if (startBlock && endBlock) {
+        minOrder = qMin(startBlock->readingOrder, endBlock->readingOrder);
+        maxOrder = qMax(startBlock->readingOrder, endBlock->readingOrder);
+    } else if (startBlock) {
+        minOrder = maxOrder = startBlock->readingOrder;
+    } else if (endBlock) {
+        minOrder = maxOrder = endBlock->readingOrder;
+    } else {
+        // No blocks found
+        return result;
+    }
+
+    // Step 4: Collect all blocks in the reading order range
+    QList<const LayoutBlock *> selectedBlocks = getBlocksInReadingOrderRange(blocks, minOrder, maxOrder);
+
+    // Sort by reading order and extract IDs
+    std::sort(selectedBlocks.begin(), selectedBlocks.end(), [](const LayoutBlock *a, const LayoutBlock *b) {
+        return a->readingOrder < b->readingOrder;
+    });
+
+    for (const LayoutBlock *block : selectedBlocks) {
+        result.append(block->id);
+    }
+
+    return result;
+}

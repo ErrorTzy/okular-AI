@@ -540,11 +540,13 @@ Part::Part(QObject *parent, const QVariantList &args)
     // Connect AI assistance signal to DBus emission
     connect(m_pageView.data(), &PageView::askAI, this,
         [this](const QString &selectedText, const QString &beforeText, const QString &afterText,
-               int pageNumber, const QRectF &selectionRect, const QString &documentPath) {
+               int pageNumber, const QRectF &selectionRect, const QString &documentPath,
+               const QStringList &blockIds) {
         QDBusMessage signal = QDBusMessage::createSignal(m_registerDbusName, QStringLiteral("org.kde.okular.AI"), QStringLiteral("AskAI"));
         signal << selectedText << beforeText << afterText
                << pageNumber << selectionRect.x() << selectionRect.y()
-               << selectionRect.width() << selectionRect.height() << documentPath;
+               << selectionRect.width() << selectionRect.height() << documentPath
+               << blockIds;
         QDBusConnection::sessionBus().send(signal);
     });
 #endif

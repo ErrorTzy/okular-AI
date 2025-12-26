@@ -682,15 +682,19 @@ void PagePainter::paintCroppedPageOnPainter(QPainter *destPainter,
                 mixedPainter->setPen(QPen(borderColor, 2));
                 mixedPainter->drawRect(blockRect);
 
-                // Draw reading order from XMP (now correctly computed by AI service)
+                // Draw reading order and block ID for debugging
                 mixedPainter->setPen(Qt::black);
                 QFont font = mixedPainter->font();
-                font.setPointSize(14);
+                font.setPointSize(10);
                 font.setBold(true);
                 mixedPainter->setFont(font);
-                // Show reading order number for debugging
-                mixedPainter->drawText(blockRect.adjusted(5, 5, 0, 0), Qt::AlignLeft | Qt::AlignTop,
-                                       QString::number(block.readingOrder));
+                // Show "order: id" e.g., "8: 0_8"
+                QString displayId = block.id;
+                if (displayId.startsWith(QStringLiteral("block_"))) {
+                    displayId = displayId.mid(6); // Remove "block_" prefix
+                }
+                QString label = QString::number(block.readingOrder) + QStringLiteral(": ") + displayId;
+                mixedPainter->drawText(blockRect.adjusted(5, 5, 0, 0), Qt::AlignLeft | Qt::AlignTop, label);
             }
 
             mixedPainter->restore();

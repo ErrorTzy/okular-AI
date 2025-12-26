@@ -182,10 +182,12 @@ Q_SIGNALS:
      * @param pageNumber Zero-indexed page number where selection occurred
      * @param selectionRect Normalized selection rectangle (0.0-1.0 coordinates)
      * @param documentPath Absolute path to the current document
+     * @param blockIds Layout block IDs overlapping the selection (empty if no XMP layout data)
      * @since 25.04
      */
     void askAI(const QString &selectedText, const QString &beforeText, const QString &afterText,
-               int pageNumber, const QRectF &selectionRect, const QString &documentPath);
+               int pageNumber, const QRectF &selectionRect, const QString &documentPath,
+               const QStringList &blockIds);
 
 protected:
     bool event(QEvent *event) override;

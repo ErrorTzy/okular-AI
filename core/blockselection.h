@@ -11,6 +11,7 @@
 #include <QMap>
 
 #include "area.h"
+#include "okularcore_export.h"
 #include "textpage.h"
 
 namespace Okular
@@ -26,7 +27,7 @@ namespace Okular
  * embedded as XMP metadata in PDFs. Okular reads this metadata and uses
  * it to provide intelligent text selection that stays within columns.
  */
-class BlockSelectionHelper
+class OKULARCORE_EXPORT BlockSelectionHelper
 {
 public:
     /**
@@ -92,6 +93,19 @@ public:
      * @return Text extracted in reading order
      */
     static QString extractTextInReadingOrder(const TextEntity::List &words, const QList<LayoutBlock> &blocks, const RegularAreaRect *area, bool useIntersects);
+
+    /**
+     * Get block IDs for a text selection.
+     *
+     * Uses reading order range between start and end blocks, matching
+     * the algorithm used by TextPage::textArea() for text selection.
+     *
+     * @param blocks List of layout blocks
+     * @param selectionStart The point where user started the selection (normalized)
+     * @param selectionEnd The point where user ended the selection (normalized)
+     * @return List of block IDs in reading order (empty if no blocks found)
+     */
+    static QStringList getBlockIdsForSelection(const QList<LayoutBlock> &blocks, const NormalizedPoint &selectionStart, const NormalizedPoint &selectionEnd);
 };
 
 } // namespace Okular

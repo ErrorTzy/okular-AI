@@ -88,6 +88,7 @@
 #endif
 #include "core/action.h"
 #include "core/audioplayer.h"
+#include "core/blockselection.h"
 #include "core/document_p.h"
 #include "core/form.h"
 #include "core/generator.h"
@@ -175,6 +176,9 @@ public:
     QColor mouseSelectionColor;
     bool mouseTextSelecting = false;
     QSet<int> pagesWithTextSelection;
+    // Normalized selection cursor positions (for block-aware selection in Ask AI)
+    Okular::NormalizedPoint textSelectionStart;
+    Okular::NormalizedPoint textSelectionEnd;
     bool mouseOnRect = false;
     int mouseMode = 0;
     MouseAnnotation *mouseAnnotation = nullptr;
@@ -2915,6 +2919,7 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                         // Extract surrounding context (256 chars before and after)
                         QString beforeText;
                         QString afterText;
+                        QStringList blockIds;
                         const Okular::Page *page = firstPageItem->page();
                         if (page) {
                             const QString fullPageText = page->text();
@@ -2954,9 +2959,18 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                                     afterText = fullPageText.mid(selPos + selectedText.length(), 256);
                                 }
                             }
+
+                            // Look up layout blocks for the selection (if XMP data available)
+                            // Use reading order range between start and end cursors,
+                            // matching the algorithm in TextPage::textArea()
+                            const Okular::TextPage *textPage = page->textPage();
+                            if (textPage && textPage->hasLayoutBlocks()) {
+                                const QList<Okular::LayoutBlock> blocks = textPage->layoutBlocks();
+                                blockIds = Okular::BlockSelectionHelper::getBlockIdsForSelection(blocks, d->textSelectionStart, d->textSelectionEnd);
+                            }
                         }
 
-                        Q_EMIT askAI(selectedText, beforeText, afterText, firstPageItem->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+                        Q_EMIT askAI(selectedText, beforeText, afterText, firstPageItem->pageNumber(), normRect, d->document->currentDocument().toLocalFile(), blockIds);
                     });
                 }
             }
@@ -3187,6 +3201,7 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                             // Extract surrounding context (256 chars before and after)
                             QString beforeText;
                             QString afterText;
+                            QStringList blockIds;
                             const QString selectedText = d->selectedText();
                             const Okular::Page *page = item->page();
                             if (page) {
@@ -3227,9 +3242,18 @@ void PageView::mouseReleaseEvent(QMouseEvent *e)
                                         afterText = fullPageText.mid(selPos + selectedText.length(), 256);
                                     }
                                 }
+
+                                // Look up layout blocks for the selection (if XMP data available)
+                                // Use reading order range between start and end cursors,
+                                // matching the algorithm in TextPage::textArea()
+                                const Okular::TextPage *textPage = page->textPage();
+                                if (textPage && textPage->hasLayoutBlocks()) {
+                                    const QList<Okular::LayoutBlock> blocks = textPage->layoutBlocks();
+                                    blockIds = Okular::BlockSelectionHelper::getBlockIdsForSelection(blocks, d->textSelectionStart, d->textSelectionEnd);
+                                }
                             }
 
-                            Q_EMIT askAI(selectedText, beforeText, afterText, item->pageNumber(), normRect, d->document->currentDocument().toLocalFile());
+                            Q_EMIT askAI(selectedText, beforeText, afterText, item->pageNumber(), normRect, d->document->currentDocument().toLocalFile(), blockIds);
                         });
                     }
 
@@ -4024,6 +4048,14 @@ std::unique_ptr<Okular::RegularAreaRect> PageView::textSelectionForItem(const Pa
     if (!endPoint.isNull()) {
         endCursor = rotateInNormRect(endPoint, geometry, item->page()->rotation());
     }
+
+    // Store normalized selection cursors for block-aware selection in Ask AI
+    // These are the actual cursor positions, not bounding box corners
+    if (!startPoint.isNull() && !endPoint.isNull()) {
+        d->textSelectionStart = startCursor;
+        d->textSelectionEnd = endCursor;
+    }
+
     Okular::TextSelection mouseTextSelectionInfo(startCursor, endCursor);
 
     const Okular::Page *okularPage = item->page();
