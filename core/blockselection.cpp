@@ -9,6 +9,7 @@
 #include <climits>
 
 #include <QtAlgorithms>
+#include <limits>
 
 using namespace Okular;
 
@@ -129,6 +130,65 @@ bool BlockSelectionHelper::isEntityInAnyBlock(const NormalizedRect &entityArea, 
     }
 
     return false;
+}
+
+const TextEntity *BlockSelectionHelper::findNearestEntityInBlock(const TextEntity::List &words, const LayoutBlock *block, const NormalizedPoint &p)
+{
+    if (!block) {
+        return nullptr;
+    }
+
+    const TextEntity *best = nullptr;
+    double bestDist = std::numeric_limits<double>::max();
+    for (auto it = words.constBegin(); it != words.constEnd(); ++it) {
+        if (!block->contains(it->area())) {
+            continue;
+        }
+
+        const NormalizedRect area = it->area();
+        const double cx = (area.left + area.right) / 2.0;
+        const double cy = (area.top + area.bottom) / 2.0;
+        const double dx = cx - p.x;
+        const double dy = cy - p.y;
+        const double dist = (dx * dx) + (dy * dy);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = &(*it);
+        }
+    }
+
+    return best;
+}
+
+static bool isSameLine(const NormalizedRect &entityArea, const NormalizedRect &lineArea)
+{
+    return entityArea.bottom >= lineArea.top && entityArea.top <= lineArea.bottom;
+}
+
+bool BlockSelectionHelper::isAfterCursor(const NormalizedRect &entityArea, const NormalizedRect *lineArea, const NormalizedPoint &cursor, const NormalizedPoint &fallbackCursor)
+{
+    if (lineArea) {
+        const bool sameLine = isSameLine(entityArea, *lineArea);
+        return (entityArea.top >= lineArea->bottom) || (sameLine && entityArea.right >= cursor.x);
+    }
+
+    const double entityCenterY = (entityArea.top + entityArea.bottom) / 2.0;
+    const double entityLeft = entityArea.left;
+    return (entityCenterY > fallbackCursor.y) ||
+           (qAbs(entityCenterY - fallbackCursor.y) < 0.02 && entityLeft >= fallbackCursor.x);
+}
+
+bool BlockSelectionHelper::isBeforeCursor(const NormalizedRect &entityArea, const NormalizedRect *lineArea, const NormalizedPoint &cursor, const NormalizedPoint &fallbackCursor)
+{
+    if (lineArea) {
+        const bool sameLine = isSameLine(entityArea, *lineArea);
+        return (entityArea.bottom <= lineArea->top) || (sameLine && entityArea.left <= cursor.x);
+    }
+
+    const double entityCenterY = (entityArea.top + entityArea.bottom) / 2.0;
+    const double entityLeft = entityArea.left;
+    return (entityCenterY < fallbackCursor.y) ||
+           (qAbs(entityCenterY - fallbackCursor.y) < 0.02 && entityLeft <= fallbackCursor.x);
 }
 
 QString BlockSelectionHelper::extractTextInReadingOrder(const TextEntity::List &words, const QList<LayoutBlock> &blocks, const RegularAreaRect *area, bool useIntersects)

@@ -30,6 +30,7 @@ private Q_SLOTS:
     void testCrossBlockSelectionTwoColumn();
     void testCrossBlockSelectionWithFullWidthBlocks();
     void testCrossBlockSelectionReadingOrderJump();
+    void testCrossBlockSelectionLinePrecision();
 };
 
 void TextPageBlockTest::testLayoutBlockDefaultConstructor()
@@ -571,6 +572,50 @@ void TextPageBlockTest::testCrossBlockSelectionReadingOrderJump()
         QVERIFY(text.contains(QStringLiteral("L3")));
         // Right column and footer are outside the geometric selection range,
         // so they shouldn't be included regardless of block logic
+    }
+}
+
+void TextPageBlockTest::testCrossBlockSelectionLinePrecision()
+{
+    // Cross-block selection should not pull in the previous line when
+    // lines are closely spaced (avoid "same line" false positives).
+
+    Okular::Page page(0, 1000, 1000, Okular::Rotation0);
+
+    Okular::TextEntity::List words;
+    // Two tightly spaced lines in the left block
+    words.append(Okular::TextEntity(QStringLiteral("L1"), Okular::NormalizedRect(0.1, 0.100, 0.2, 0.110)));
+    words.append(Okular::TextEntity(QStringLiteral("L2"), Okular::NormalizedRect(0.1, 0.119, 0.2, 0.129)));
+    // One line in the right block
+    words.append(Okular::TextEntity(QStringLiteral("R1"), Okular::NormalizedRect(0.6, 0.150, 0.7, 0.160)));
+
+    Okular::TextPage *textPage = new Okular::TextPage(words);
+
+    QList<Okular::LayoutBlock> blocks;
+    blocks.append(Okular::LayoutBlock(
+        QStringLiteral("left"), 0,
+        Okular::NormalizedRect(0.0, 0.0, 0.45, 1.0),
+        QStringLiteral("TEXT"), 0, 1.0));
+    blocks.append(Okular::LayoutBlock(
+        QStringLiteral("right"), 0,
+        Okular::NormalizedRect(0.55, 0.0, 1.0, 1.0),
+        QStringLiteral("TEXT"), 1, 1.0));
+
+    textPage->setLayoutBlocks(blocks);
+    page.setTextPage(textPage);
+
+    // Start inside L2, end inside R1 to trigger cross-block selection.
+    {
+        Okular::TextSelection selection(
+            Okular::NormalizedPoint(0.10, 0.124),  // Within L2 (left edge to catch same-line tolerance)
+            Okular::NormalizedPoint(0.65, 0.155)); // Within R1
+        std::unique_ptr<Okular::RegularAreaRect> area = textPage->textArea(selection, false);
+        QVERIFY(area);
+
+        QString text = textPage->text(area.get());
+        QVERIFY(!text.contains(QStringLiteral("L1"))); // Should not pull previous line
+        QVERIFY(text.contains(QStringLiteral("L2")));
+        QVERIFY(text.contains(QStringLiteral("R1")));
     }
 }
 

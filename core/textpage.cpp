@@ -400,6 +400,11 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
 
     NormalizedPoint startC = sel.start();
     NormalizedPoint endC = sel.end();
+    // Preserve the original selection endpoints for block-aware selection.
+    // The core selection algorithm swaps points for geometric ordering, but
+    // block-aware selection must use the real endpoints and order by reading order.
+    NormalizedPoint blockStartC = startC;
+    NormalizedPoint blockEndC = endC;
 
     // if startPoint is right to endPoint swap them
     if (startC.x > endC.x) {
@@ -482,6 +487,23 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
             endC.y = minY / scaleY;
         }
     }
+
+    // Clamp the original endpoints to the page bounding box for block-aware selection.
+    auto clampBlockPoint = [&](NormalizedPoint &p) {
+        if (p.x * scaleX < minX) {
+            p.x = minX / scaleX;
+        } else if (p.x * scaleX > maxX) {
+            p.x = maxX / scaleX;
+        }
+
+        if (p.y * scaleY < minY) {
+            p.y = minY / scaleY;
+        } else if (p.y * scaleY > maxY) {
+            p.y = maxY / scaleY;
+        }
+    };
+    clampBlockPoint(blockStartC);
+    clampBlockPoint(blockEndC);
 
     TextEntity::List::ConstIterator it = d->m_words.constBegin(), itEnd = d->m_words.constEnd();
     TextEntity::List::ConstIterator start = it, end = itEnd, tmpIt = it; //, tmpItEnd = itEnd;
@@ -648,8 +670,8 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
     } else {
         // Block-aware selection with reading order support
         // Find the blocks containing start and end cursors
-        NormalizedPoint startPoint(startC.x, startC.y);
-        NormalizedPoint endPoint(endC.x, endC.y);
+        NormalizedPoint startPoint(blockStartC.x, blockStartC.y);
+        NormalizedPoint endPoint(blockEndC.x, blockEndC.y);
 
         // Find block containing start cursor
         const LayoutBlock *startBlock = BlockSelectionHelper::findBlockContaining(d->m_layoutBlocks, startPoint);
@@ -693,6 +715,35 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
                 }
             }
         } else {
+            const TextEntity *startEntity = nullptr;
+            if (startBlock) {
+                if (start != d->m_words.constEnd() && startBlock->contains(start->area())) {
+                    startEntity = &(*start);
+                } else {
+                    startEntity = BlockSelectionHelper::findNearestEntityInBlock(d->m_words, startBlock, startPoint);
+                }
+            }
+
+            const TextEntity *endEntity = nullptr;
+            if (endBlock) {
+                if (end != d->m_words.constEnd() && endBlock->contains(end->area())) {
+                    endEntity = &(*end);
+                } else {
+                    endEntity = BlockSelectionHelper::findNearestEntityInBlock(d->m_words, endBlock, endPoint);
+                }
+            }
+
+            NormalizedRect startLineArea;
+            if (startEntity) {
+                startLineArea = startEntity->area();
+            }
+            NormalizedRect endLineArea;
+            if (endEntity) {
+                endLineArea = endEntity->area();
+            }
+
+            const bool forwardInReadingOrder = !startBlock || !endBlock || startBlock->readingOrder <= endBlock->readingOrder;
+
             // Cross-block selection with proper start/end handling:
             // - Start block (where user started selecting): partial selection from cursor
             // - Intermediate blocks: all entities
@@ -720,8 +771,6 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
 
                 // Get entity's geometric position for comparison
                 NormalizedRect entityArea = it->area();
-                double entityCenterY = (entityArea.top + entityArea.bottom) / 2.0;
-                double entityLeft = entityArea.left;
 
                 if (inStartBlock && inEndBlock) {
                     // Start and end are in the same block - shouldn't happen in cross-block
@@ -733,18 +782,22 @@ std::unique_ptr<RegularAreaRect> TextPage::textArea(const TextSelection &sel, bo
                     // Entity is in the block where selection started
                     // Include if entity is at or after the start cursor position
                     // (below the start line, or on the same line but to the right)
-                    bool afterStart = (entityCenterY > startC.y) ||
-                                      (qAbs(entityCenterY - startC.y) < 0.02 && entityLeft >= startC.x);
-                    if (afterStart) {
+                    const NormalizedRect *lineArea = startEntity ? &startLineArea : nullptr;
+                    const bool afterStart = BlockSelectionHelper::isAfterCursor(entityArea, lineArea, startPoint, blockStartC);
+                    const bool beforeStart = BlockSelectionHelper::isBeforeCursor(entityArea, lineArea, startPoint, blockStartC);
+                    const bool includeStart = forwardInReadingOrder ? afterStart : beforeStart;
+                    if (includeStart) {
                         ret->appendShape(it->transformedArea(matrix), side);
                     }
                 } else if (inEndBlock) {
                     // Entity is in the block where selection ended
                     // Include if entity is at or before the end cursor position
                     // (above the end line, or on the same line but to the left)
-                    bool beforeEnd = (entityCenterY < endC.y) ||
-                                     (qAbs(entityCenterY - endC.y) < 0.02 && entityLeft <= endC.x);
-                    if (beforeEnd) {
+                    const NormalizedRect *lineArea = endEntity ? &endLineArea : nullptr;
+                    const bool beforeEnd = BlockSelectionHelper::isBeforeCursor(entityArea, lineArea, endPoint, blockEndC);
+                    const bool afterEnd = BlockSelectionHelper::isAfterCursor(entityArea, lineArea, endPoint, blockEndC);
+                    const bool includeEnd = forwardInReadingOrder ? beforeEnd : afterEnd;
+                    if (includeEnd) {
                         ret->appendShape(it->transformedArea(matrix), side);
                     }
                 } else {

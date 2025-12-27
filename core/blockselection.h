@@ -81,6 +81,38 @@ public:
     static bool isEntityInAnyBlock(const NormalizedRect &entityArea, const QList<const LayoutBlock *> &blocks);
 
     /**
+     * Find the nearest text entity to a point within a specific block.
+     *
+     * @param words The list of text entities
+     * @param block The block to search within
+     * @param p The cursor position in normalized coordinates
+     * @return Pointer to the nearest entity in the block, or nullptr if none found
+     */
+    static const TextEntity *findNearestEntityInBlock(const TextEntity::List &words, const LayoutBlock *block, const NormalizedPoint &p);
+
+    /**
+     * Check if an entity is after the cursor position, optionally using line context.
+     *
+     * @param entityArea The entity's bounding box
+     * @param lineArea The line area containing the cursor (optional)
+     * @param cursor The cursor position to compare against
+     * @param fallbackCursor The fallback cursor for geometric comparison
+     * @return true if the entity is after the cursor
+     */
+    static bool isAfterCursor(const NormalizedRect &entityArea, const NormalizedRect *lineArea, const NormalizedPoint &cursor, const NormalizedPoint &fallbackCursor);
+
+    /**
+     * Check if an entity is before the cursor position, optionally using line context.
+     *
+     * @param entityArea The entity's bounding box
+     * @param lineArea The line area containing the cursor (optional)
+     * @param cursor The cursor position to compare against
+     * @param fallbackCursor The fallback cursor for geometric comparison
+     * @return true if the entity is before the cursor
+     */
+    static bool isBeforeCursor(const NormalizedRect &entityArea, const NormalizedRect *lineArea, const NormalizedPoint &cursor, const NormalizedPoint &fallbackCursor);
+
+    /**
      * Extract text from entities, respecting block reading order.
      *
      * Entities are grouped by block, sorted within each block by geometric
