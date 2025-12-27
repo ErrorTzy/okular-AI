@@ -16,3 +16,9 @@ CMakeLists.txt.user*
 # Flatpak
 .flatpak-builder
 build-dir
+
+# Dev
+AGENTS.md
+CLAUDE.md
+.claude/
+.codex/
